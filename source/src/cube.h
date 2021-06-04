@@ -67,7 +67,7 @@ extern float waterlevel;
 	#define AC_VERSION 1203
 	#define AC_MASTER_PORT 28760
 #else
-	#define AC_VERSION -(1203) 
+	#define AC_VERSION 4201
 	#define AC_MASTER_PORT 28758
 #endif
 
