@@ -345,7 +345,7 @@ bool collide(physent *d, bool spawn, float drop, float rise)
             d->vel.z = 0;                     // cancel out jumping velocity
         }
 
-        const float floorclamp = d->crouching && (!d->lastjump || lastmillis - d->lastjump > 250) ? 0.1f : 0.01f;
+        const float floorclamp = d->crouching ? 0.1f : 0.01f;
         d->onfloor = d->o.z-eyeheight-lo < floorclamp;
     }
     return false;
@@ -396,99 +396,99 @@ void resizephysent(physent *pl, int moveres, int curtime, float min, float max)
 
 FVARP(flyspeed, 1.0, 2.0, 5.0);
 
-void moveplayer(physent *pl, int moveres, bool local, int curtime)
+void moveplayer(physent* pl, int moveres, bool local, int curtime)
 {
     bool water = false;
-    const bool editfly = pl->state==CS_EDITING;
-    const bool specfly = pl->type==ENT_PLAYER && ((playerent *)pl)->spectatemode==SM_FLY;
+    const bool editfly = pl->state == CS_EDITING;
+    const bool specfly = pl->type == ENT_PLAYER && ((playerent*)pl)->spectatemode == SM_FLY;
     const bool isfly = editfly || specfly;
 
     vec d;      // vector of direction we ideally want to move in
 
     float drop = 0, rise = 0;
 
-    if(pl->type==ENT_BOUNCE)
+    if (pl->type == ENT_BOUNCE)
     {
-        bounceent* bounce = (bounceent *) pl;
+        bounceent* bounce = (bounceent*)pl;
         water = waterlevel > pl->o.z;
 
-        const float speed = curtime*pl->maxspeed/(water ? 2000.0f : 1000.0f);
+        const float speed = curtime * pl->maxspeed / (water ? 2000.0f : 1000.0f);
         const float friction = water ? 20.0f : (pl->onfloor || isfly ? 6.0f : 30.0f);
-        const float fpsfric = max(friction*20.0f/curtime, 1.0f);
+        const float fpsfric = max(friction * 20.0f / curtime, 1.0f);
 
-        if(pl->onfloor) // apply friction
+        if (pl->onfloor) // apply friction
         {
-            pl->vel.mul(fpsfric-1);
+            pl->vel.mul(fpsfric - 1);
             pl->vel.div(fpsfric);
         }
         else // apply gravity
         {
             const float CUBES_PER_METER = 4; // assumes 4 cubes make up 1 meter
             const float BOUNCE_MASS = 0.5f; // sane default mass of 0.5 kg
-            const float GRAVITY = BOUNCE_MASS*9.81f/CUBES_PER_METER/1000.0f;
-            bounce->vel.z -= GRAVITY*curtime;
+            const float GRAVITY = BOUNCE_MASS * 9.81f / CUBES_PER_METER / 1000.0f;
+            bounce->vel.z -= GRAVITY * curtime;
         }
 
         d = bounce->vel;
         d.mul(speed);
-        if(water) d.div(6.0f); // incorrect
+        if (water) d.div(6.0f); // incorrect
 
         // rotate
-        float rotspeed = bounce->rotspeed*d.magnitude();
-        pl->pitch = fmod(pl->pitch+rotspeed, 360.0f);
-        pl->yaw = fmod(pl->yaw+rotspeed, 360.0f);
+        float rotspeed = bounce->rotspeed * d.magnitude();
+        pl->pitch = fmod(pl->pitch + rotspeed, 360.0f);
+        pl->yaw = fmod(pl->yaw + rotspeed, 360.0f);
     }
     else // fake physics for player ents to create _the_ cube movement (tm)
     {
         const int timeinair = pl->timeinair;
-        int move = intermission || (pl->onladder && !pl->onfloor && pl->move == -1) ? 0 : pl->move; // movement on ladder
-        if(!editfly) water = waterlevel > pl->o.z - 0.5f;
+        int move = pl->onladder && !pl->onfloor && pl->move == -1 ? 0 : pl->move; // movement on ladder
+        if (!editfly) water = waterlevel > pl->o.z - 0.5f;
 
-        float chspeed = (pl->onfloor || pl->onladder || !pl->crouchedinair) ? 0.4f : 1.0f;
+        float chspeed = 0.4f;
+        if (!(pl->onfloor || pl->onladder)) chspeed = 1.0f;
 
-        const bool crouching = pl->crouching || (pl->eyeheight < pl->maxeyeheight && pl->eyeheight > 1.1f);
-        const float speed = curtime/(water ? 2000.0f : 1000.0f)*pl->maxspeed*(crouching && pl->state != CS_EDITING ? chspeed : 1.0f)*(pl==player1 && isfly ? flyspeed : 1.0f);
+        const bool crouching = pl->crouching || (pl->eyeheight < pl->maxeyeheight&& pl->eyeheight > 1.1f);
+        const float speed = curtime / (water ? 2000.0f : 1000.0f) * pl->maxspeed * (crouching && pl->state != CS_EDITING ? chspeed : 1.0f) * (pl == player1 && isfly ? flyspeed : 1.0f);
         const float friction = water ? 20.0f : (pl->onfloor || isfly ? 6.0f : (pl->onladder ? 1.5f : 30.0f));
-        const float fpsfric = max(friction/curtime*20.0f, 1.0f);
+        const float fpsfric = max(friction / curtime * 20.0f, 1.0f);
 
-        d.x = (float)(move*cosf(RAD*(pl->yaw-90)));
-        d.y = (float)(move*sinf(RAD*(pl->yaw-90)));
+        d.x = (float)(move * cosf(RAD * (pl->yaw - 90)));
+        d.y = (float)(move * sinf(RAD * (pl->yaw - 90)));
         d.z = 0.0f;
 
-        if(isfly || water)
+        if (isfly || water)
         {
-            d.x *= (float)cosf(RAD*(pl->pitch));
-            d.y *= (float)cosf(RAD*(pl->pitch));
-            d.z = (float)(move*sinf(RAD*(pl->pitch)));
+            d.x *= (float)cosf(RAD * (pl->pitch));
+            d.y *= (float)cosf(RAD * (pl->pitch));
+            d.z = (float)(move * sinf(RAD * (pl->pitch)));
         }
 
-        d.x += (float)(pl->strafe*cosf(RAD*(pl->yaw-180)));
-        d.y += (float)(pl->strafe*sinf(RAD*(pl->yaw-180)));
+        d.x += (float)(pl->strafe * cosf(RAD * (pl->yaw - 180)));
+        d.y += (float)(pl->strafe * sinf(RAD * (pl->yaw - 180)));
 
-        float curfullspeed = d.magnitudexy();
-
-        pl->vel.mul(fpsfric-1.0f);   // slowly apply friction and direction to velocity, gives a smooth movement
+        pl->vel.mul(fpsfric - 1.0f);   // slowly apply friction and direction to velocity, gives a smooth movement
         pl->vel.add(d);
         pl->vel.div(fpsfric);
         d = pl->vel;
         d.mul(speed);
 
-        if(editfly)                // just apply velocity
+        if (editfly)                // just apply velocity
         {
             pl->o.add(d);
-            if(pl->jumpnext && !pl->trycrouch)
+            if (pl->jumpnext && !pl->trycrouch)
             {
-                pl->vel.z = 0.5f; // fly directly upwards while holding jump keybinds
+                pl->jumpnext = true; // fly directly upwards while holding jump keybinds
+                pl->vel.z = 0.5f;
             }
             else if (pl->trycrouch && !pl->jumpnext)
             {
                 pl->vel.z = -0.5f; // fly directly down while holding crouch keybinds
             }
         }
-        else if(specfly)
+        else if (specfly)
         {
-            rise = speed/moveres/1.2f;
-            if(pl->jumpnext)
+            rise = speed / moveres / 1.2f;
+            if (pl->jumpnext)
             {
                 pl->jumpnext = false;
                 pl->vel.z = 2;
@@ -496,41 +496,40 @@ void moveplayer(physent *pl, int moveres, bool local, int curtime)
         }
         else                        // apply velocity with collisions
         {
-            if(pl->type!=ENT_CAMERA)
+            if (pl->type != ENT_CAMERA)
             {
-                if(pl->onladder)
+                if (pl->onladder)
                 {
                     const float climbspeed = 1.0f;
 
-                    if(pl->type==ENT_BOT && pl->state == CS_ALIVE) pl->vel.z = climbspeed; // bots climb upwards only
-                    else if(pl->type==ENT_PLAYER && pl->state == CS_ALIVE)
+                    if (pl->type == ENT_BOT && pl->state == CS_ALIVE) pl->vel.z = climbspeed; // bots climb upwards only
+                    else if (pl->type == ENT_PLAYER && pl->state == CS_ALIVE)
                     {
-                        if(((playerent *)pl)->k_up && pl->move > 0) pl->vel.z = climbspeed;
-                        else if(((playerent *)pl)->k_down && pl->move < 0) pl->vel.z = -climbspeed;
+                        if (((playerent*)pl)->k_up) pl->vel.z = climbspeed;
+                        else if (((playerent*)pl)->k_down && pl->move < 0) pl->vel.z = -climbspeed;
                     }
                     pl->timeinair = 0;
                 }
                 else
                 {
-                    if(pl->onfloor || water)
+                    if (pl->onfloor || water)
                     {
-                        if(pl->jumpnext)
+                        if (pl->jumpnext)
                         {
-                            pl->jumpd = true;
                             pl->jumpnext = false;
-                            bool doublejump = pl->lastjump && lastmillis - pl->lastjump < 250 && pl->strafe != 0 && pl->o.z - pl->eyeheight - pl->lastjumpheight > 0.2f;
-                            pl->lastjumpheight = pl->o.z - pl->eyeheight;
+                            bool doublejump = pl->lastjump && lastmillis - pl->lastjump < 250 && pl->strafe != 0 && pl->lastjumpheight != 0 && pl->lastjumpheight != pl->o.z;
+                            pl->lastjumpheight = pl->o.z;
                             pl->vel.z = 2.0f; // physics impulse upwards
-                            if(doublejump && curfullspeed > 0.1f) // more velocity on double jump
+                            if (doublejump) // more velocity on double jump
                             {
-                                pl->vel.mul(1.25f / max(pl->vel.magnitudexy() / curfullspeed, 1.0f));
+                                pl->vel.mul(1.25f);
                             }
-                            if(water) // dampen velocity change even harder, gives correct water feel
+                            if (water) // dampen velocity change even harder, gives correct water feel
                             {
                                 pl->vel.x /= 8.0f;
                                 pl->vel.y /= 8.0f;
                             }
-                            else if(pl==player1 || pl->type!=ENT_PLAYER) audiomgr.playsoundc(S_JUMP, pl);
+                            else if (pl == player1 || pl->type != ENT_PLAYER) audiomgr.playsoundc(S_JUMP, pl);
                             pl->lastjump = lastmillis;
                         }
                         pl->timeinair = 0;
@@ -539,83 +538,69 @@ void moveplayer(physent *pl, int moveres, bool local, int curtime)
                     else
                     {
                         pl->timeinair += curtime;
-                        if (pl->trycrouch && !pl->crouching && !pl->crouchedinair && pl->state!=CS_EDITING) {
+                        if (pl->trycrouch && !pl->crouching && !pl->crouchedinair && pl->state != CS_EDITING) {
                             pl->vel.z += 0.3f;
                             pl->crouchedinair = true;
                         }
                     }
                 }
 
-                if(timeinair > 200 && !pl->timeinair && pl->inwater == water)
+                if (timeinair > 200 && !pl->timeinair && pl->inwater == water)
                 {
                     int sound = timeinair > 800 ? S_HARDLAND : S_SOFTLAND;
-                    if(pl->state!=CS_DEAD)
+                    if (pl->state != CS_DEAD)
                     {
-                        if(pl==player1 || pl->type!=ENT_PLAYER) audiomgr.playsoundc(sound, pl);
+                        if (pl == player1 || pl->type != ENT_PLAYER) audiomgr.playsoundc(sound, pl);
                     }
                 }
             }
 
             const float gravity = 20.0f;
-            float dropf = (gravity-1)+pl->timeinair/15.0f;         // incorrect, but works fine
-            if(water) { dropf = 5; pl->timeinair = 0; }            // float slowly down in water
-            if(pl->onladder) { dropf = 0; pl->timeinair = 0; }
+            float dropf = (gravity - 1) + pl->timeinair / 15.0f;         // incorrect, but works fine
+            if (water) { dropf = 5; pl->timeinair = 0; }            // float slowly down in water
+            if (pl->onladder) { dropf = 0; pl->timeinair = 0; }
 
-            drop = dropf*curtime/gravity/100/moveres;              // at high fps, gravity kicks in too fast
-            rise = speed/moveres/1.2f;                             // extra smoothness when lifting up stairs
-            if(pl->maxspeed-16.0f>0.5f) pl += 0xF0F0;
+            drop = dropf * curtime / gravity / 100 / moveres;              // at high fps, gravity kicks in too fast
+            rise = speed / moveres / 1.2f;                             // extra smoothness when lifting up stairs
+            if (pl->maxspeed - 16.0f > 0.5f) pl += 0xF0F0;
         }
     }
 
     bool collided = false;
     vec oldorigin = pl->o;
 
-    if(!editfly) loopi(moveres)                                // discrete steps collision detection & sliding
+    if (!editfly) loopi(moveres)                                // discrete steps collision detection & sliding
     {
-        const float f = 1.0f/moveres;
+        const float f = 1.0f / moveres;
 
         // try move forward
         vec o_null = pl->o;
-        pl->o.x += f*d.x;
-        pl->o.y += f*d.y;
-        pl->o.z += f*d.z;
+        pl->o.x += f * d.x;
+        pl->o.y += f * d.y;
+        pl->o.z += f * d.z;
         volatile vec gcco3(pl->o.x, pl->o.y, pl->o.z);  // force capping the o-values to float-representables (avoid player stuck conditions on 32-bit g++ builds)
         pl->o = vec(gcco3.x, gcco3.y, gcco3.z);
         hitplayer = NULL;
         bool spect3rd = player1->spectatemode > SM_FOLLOW1ST && player1->spectatemode <= SM_FOLLOW3RD_TRANSPARENT;
-        if((pl->type == ENT_CAMERA && pl == camera1 && spect3rd) || !collide(pl, false, drop, rise)) continue;
+        if ((pl->type == ENT_CAMERA && pl == camera1 && spect3rd) || !collide(pl, false, drop, rise)) continue;
         int cornersurface1 = cornersurface;
         vec o_trying = pl->o;  // o_trying = o_null + f * d  (= one microstep in desired direction)
-        if(!cornersurface1)
+        if (!cornersurface1)
         { // brute-force check, if it is a corner hit after all
-            if(pl->type != ENT_BOUNCE)
-            {
-                int collx = 0, colly = 0;
-                pl->o.x = o_null.x;
-                if(collide(pl, false, drop, rise)) collx = cornersurface;
-                pl->o = o_trying;
-                pl->o.y = o_null.y;
-                if(collide(pl, false, drop, rise)) colly = cornersurface;
-                cornersurface1 = collx | colly;
-                if((cornersurface1 & 3) == 3) cornersurface1 = 0;
-            }
-            else
-            { // try really, really hard to detect corners for bounces (to compensate for the not-so-micro bounceent-microsteps)
-                vec vd(d.x, d.y, 0);
-                static const float a = 3.0f*PI2/10.0f, ca = cosf(a), sa = sinf(a); // 10 probe points, stretched over three turns
-                loopj(10)
-                {
-                    if(j) vd = vec(ca * vd.x - sa * vd.y, ca * vd.y + sa *vd.x, 0);
-                    pl->o = o_trying;
-                    pl->o.add(vd);
-                    if(collide(pl, false, drop, rise) && cornersurface) break;
-                }
-                cornersurface1 = cornersurface;
-            }
+            int collx = 0, colly = 0;
+            pl->o.x = o_null.x;
+            if (collide(pl, false, drop, rise)) collx = cornersurface;
             pl->o = o_trying;
+            pl->o.y = o_null.y;
+            if (collide(pl, false, drop, rise)) colly = cornersurface;
+
+            pl->o = o_trying;
+
+            cornersurface1 = collx | colly;
+            if ((cornersurface1 & 3) == 3) cornersurface1 = 0;
         }
         collided = true;
-        if(pl->type==ENT_BOUNCE && cornersurface1)
+        if (pl->type == ENT_BOUNCE && cornersurface1)
         { // try corner bounce
             float ct2f = cornersurface1 & 2 ? -1.0 : 1.0;
             vec xd = d;
@@ -623,7 +608,7 @@ void moveplayer(physent *pl, int moveres, bool local, int curtime)
             xd.y = d.x * ct2f;
             pl->o.x += f * (-d.x + xd.x);
             pl->o.y += f * (-d.y + xd.y);
-            if(!collide(pl, false, drop, rise))
+            if (!collide(pl, false, drop, rise))
             {
                 d = xd;
                 float sw = pl->vel.x * ct2f;
@@ -634,23 +619,24 @@ void moveplayer(physent *pl, int moveres, bool local, int curtime)
             }
             pl->o = o_trying;
         }
-        if(pl->type==ENT_CAMERA || (pl->type==ENT_PLAYER && pl->state==CS_DEAD && ((playerent *)pl)->spectatemode != SM_FLY))
+
+        if (pl->type == ENT_CAMERA || (pl->type == ENT_PLAYER && pl->state == CS_DEAD && ((playerent*)pl)->spectatemode != SM_FLY))
         {
             pl->o = o_null;
             break;
         }
-        if(pl->type!=ENT_BOUNCE && hitplayer)
+        if (pl->type != ENT_BOUNCE && hitplayer)
         {
-            vec dr(hitplayer->o.x-pl->o.x,hitplayer->o.y-pl->o.y,0);
+            vec dr(hitplayer->o.x - pl->o.x, hitplayer->o.y - pl->o.y, 0);
             float invdist = 1.0f / dr.magnitudexy(),
-                  push = (invdist < 10.0f ? dr.dotxy(d)*1.1f*invdist : dr.dotxy(d) * 11.0f);
+                push = (invdist < 10.0f ? dr.dotxy(d) * 1.1f * invdist : dr.dotxy(d) * 11.0f);
 
-            pl->o.x -= f*d.x*push;
-            pl->o.y -= f*d.y*push;
-            if(i==0 && pl->type==ENT_BOT) pl->yaw += (dr.cxy(d)>0 ? 2:-2); // force the bots to change direction
-            if( !collide(pl, false, drop, rise) ) continue;
-            pl->o.x += f*d.x*push;
-            pl->o.y += f*d.y*push;
+            pl->o.x -= f * d.x * push;
+            pl->o.y -= f * d.y * push;
+            if (i == 0 && pl->type == ENT_BOT) pl->yaw += (dr.cxy(d) > 0 ? 2 : -2); // force the bots to change direction
+            if (!collide(pl, false, drop, rise)) continue;
+            pl->o.x += f * d.x * push;
+            pl->o.y += f * d.y * push;
         }
 
         // the desired direction didn't work
@@ -659,16 +645,16 @@ void moveplayer(physent *pl, int moveres, bool local, int curtime)
         vec o_nullxy = pl->o; // x and y from o_null but z from o_trying (possibly altered by collide() as well)
 
         // try sliding
-        if(cornersurface1)
+        if (cornersurface1)
         {
             // along a corner wall
             float ct2f = cornersurface1 & 2 ? -1.0 : 1.0;
             float diag = fabs(d.x + ct2f * d.y) * 0.5f;
-            vec vd = vec((d.y*ct2f+d.x >= 0.0f ? diag : -diag), (d.x*ct2f+d.y >= 0.0f ? diag : -diag), 0);
+            vec vd = vec((d.y * ct2f + d.x >= 0.0f ? diag : -diag), (d.x * ct2f + d.y >= 0.0f ? diag : -diag), 0);
             float ff = f / (cornersurface1 & 4 ? 42.0f : 333.0f);
-            pl->o.x += f*vd.x - ff*d.x;
-            pl->o.y += f*vd.y - ff*d.y;
-            if(!collide(pl, false, drop, rise))
+            pl->o.x += f * vd.x - ff * d.x;
+            pl->o.y += f * vd.y - ff * d.y;
+            if (!collide(pl, false, drop, rise))
             {
                 d.x = vd.x; d.y = vd.y;
                 continue;
@@ -677,47 +663,47 @@ void moveplayer(physent *pl, int moveres, bool local, int curtime)
         }
         // try slide along y axis
         pl->o.y = o_trying.y;
-        if(!collide(pl, false, drop, rise))
+        if (!collide(pl, false, drop, rise))
         {
             d.x = 0;
-            if(pl->type==ENT_BOUNCE) { pl->vel.x = -pl->vel.x; pl->vel.mul(0.7f); }
+            if (pl->type == ENT_BOUNCE) { pl->vel.x = -pl->vel.x; pl->vel.mul(0.7f); }
             continue;
         }
         pl->o = o_nullxy;
         // try x axis
         pl->o.x = o_trying.x;
-        if(!collide(pl, false, drop, rise))
+        if (!collide(pl, false, drop, rise))
         {
             d.y = 0;
-            if(pl->type==ENT_BOUNCE) { pl->vel.y = -pl->vel.y; pl->vel.mul(0.7f); }
+            if (pl->type == ENT_BOUNCE) { pl->vel.y = -pl->vel.y; pl->vel.mul(0.7f); }
             continue;
         }
         pl->o = o_nullxy;
         // try just dropping down
-        if(!collide(pl, false, drop, rise))
+        if (!collide(pl, false, drop, rise))
         {
             d.y = d.x = 0;
             continue;
         }
         pl->o = o_null;
-        if(pl->type==ENT_BOUNCE) { pl->vel.z = -pl->vel.z; pl->vel.mul(0.5f); }
+        if (pl->type == ENT_BOUNCE) { pl->vel.z = -pl->vel.z; pl->vel.mul(0.5f); }
         break;
     }
 
-    pl->stuck = (oldorigin==pl->o);
-    if(collided) pl->oncollision();
+    pl->stuck = (oldorigin == pl->o);
+    if (collided) pl->oncollision();
     else pl->onmoved(oldorigin.sub(pl->o));
 
-    if(pl->type==ENT_CAMERA) return;
+    if (pl->type == ENT_CAMERA) return;
 
-    if(pl->type!=ENT_BOUNCE)
+    if (pl->type != ENT_BOUNCE)
     {
-        if(pl->type == ENT_PLAYER)
+        if (pl->type == ENT_PLAYER)
         {
             // automatically apply smooth roll when strafing
-            playerent *p = (playerent *)pl;
+            playerent* p = (playerent*)pl;
             float iir = 1.0f + sqrtf((float)curtime) / 25.0f;
-            if(pl->strafe==0)
+            if (pl->strafe == 0)
             {
                 p->movroll /= iir;
             }
@@ -727,50 +713,56 @@ void moveplayer(physent *pl, int moveres, bool local, int curtime)
             }
             p->effroll /= iir; // fade damage roll
             pl->roll = p->movroll + p->effroll;
-            if(pl != player1) pl->roll = clamp(pl->roll, (float)-maxrollremote, (float)maxrollremote);
+            if (pl != player1) pl->roll = clamp(pl->roll, (float)-maxrollremote, (float)maxrollremote);
         }
         // smooth pitch
-        const float fric = 6.0f/curtime*20.0f;
-        pl->pitch += pl->pitchvel*(curtime/1000.0f)*pl->maxspeed*(pl->crouching ? 0.75f : 1.0f);
-        pl->pitchvel *= fric-3;
+        const float fric = 6.0f / curtime * 20.0f;
+        pl->pitch += pl->pitchvel * (curtime / 1000.0f) * pl->maxspeed * (pl->crouching ? 0.75f : 1.0f);
+        pl->pitchvel *= fric - 3;
         pl->pitchvel /= fric;
-        if(pl->pitchvel < 0.05f && pl->pitchvel > 0.001f) pl->pitchvel -= ((playerent *)pl)->weaponsel->info.recoilbackfade/100.0f; // slide back
-        if(pl->pitchvel) fixcamerarange(pl); // fix pitch if necessary
+        /*extern int recoiltest;
+        if(recoiltest)
+        {
+            if(pl->pitchvel < 0.05f && pl->pitchvel > 0.001f) pl->pitchvel -= recoilbackfade/100.0f; // slide back
+        }
+        else*/ if (pl->pitchvel < 0.05f && pl->pitchvel > 0.001f) pl->pitchvel -= ((playerent*)pl)->weaponsel->info.recoilbackfade / 100.0f; // slide back
+        if (pl->pitchvel) fixcamerarange(pl); // fix pitch if necessary
     }
 
     // play sounds on water transitions
-    if(pl->type!=ENT_CAMERA)
+    if (pl->type != ENT_CAMERA)
     {
-        if(!pl->inwater && water)
+        if (!pl->inwater && water)
         {
-            if(!pl->lastsplash || lastmillis-pl->lastsplash>500)
+            if (!pl->lastsplash || lastmillis - pl->lastsplash > 500)
             {
                 audiomgr.playsound(S_SPLASH2, &pl->o);
                 pl->lastsplash = lastmillis;
             }
-            if(pl==player1) pl->vel.z = 0;
+            if (pl == player1) pl->vel.z = 0;
         }
-        else if(pl->inwater && !water)
+        else if (pl->inwater && !water)
         {
             audiomgr.playsound(S_SPLASH1, &pl->o);
-            if(pl->type == ENT_BOUNCE) pl->maxspeed /= 8; // prevent nades from jumping out of water
+            if (pl->type == ENT_BOUNCE) pl->maxspeed /= 8; // prevent nades from jumping out of water
         }
         pl->inwater = water;
     }
 
     // store previous locations of all players/bots
-    if(pl->type==ENT_PLAYER || pl->type==ENT_BOT)
+    if (pl->type == ENT_PLAYER || pl->type == ENT_BOT)
     {
-        ((playerent *)pl)->history.update(pl->o, lastmillis);
+        ((playerent*)pl)->history.update(pl->o, lastmillis);
     }
 
     // apply volume-resize when crouching
-    if(pl->type==ENT_PLAYER || pl->type==ENT_BOT)
+    if (pl->type == ENT_PLAYER || pl->type == ENT_BOT)
     {
-        if(!intermission && !ispaused && (pl == player1 || pl->type == ENT_BOT)) updatecrouch((playerent *)pl, pl->trycrouch);
-        const float croucheyeheight = pl->maxeyeheight*3.0f/4.0f;
+        //         if(pl==player1 && !(intermission || player1->onladder || (pl->trycrouch && !player1->onfloor && player1->timeinair > 50))) updatecrouch(player1, player1->trycrouch);
+        if (!intermission && (pl == player1 || pl->type == ENT_BOT)) updatecrouch((playerent*)pl, pl->trycrouch);
+        const float croucheyeheight = pl->maxeyeheight * 3.0f / 4.0f;
         resizephysent(pl, moveres, curtime, croucheyeheight, pl->maxeyeheight);
-    }
+    }   
 }
 
 const int PHYSFPS = 200;
@@ -858,13 +850,13 @@ void attack(bool on)
 
 void jumpn(bool on)
 {
-    static bool wason = false;
-    player1->jumpnext = on && !wason && !player1->crouching && !intermission && !player1->isspectating() && !ispaused;
-    wason = on;
     if(player1->isspectating())
     {
         if(lastmillis - player1->lastdeath > 1000 && on) togglespect();
     }
+
+    else if (player1->crouching || player1->isspectating() || intermission || ispaused) return;
+    else player1->jumpnext = on;
 }
 
 void updatecrouch(playerent *p, bool on)
